@@ -11,19 +11,9 @@ import "./_leafletWorkaround.ts"; // fixes for missing Leaflet images
 // Import our luck function
 import luck from "./_luck.ts";
 
-// Create basic UI elements
-
-const controlPanelDiv = document.createElement("div");
-controlPanelDiv.id = "controlPanel";
-document.body.append(controlPanelDiv);
-
 const mapDiv = document.createElement("div");
 mapDiv.id = "map";
 document.body.append(mapDiv);
-
-const statusPanelDiv = document.createElement("div");
-statusPanelDiv.id = "statusPanel";
-document.body.append(statusPanelDiv);
 
 // Our classroom location
 const CLASSROOM_LATLNG = leaflet.latLng(
@@ -34,8 +24,8 @@ const CLASSROOM_LATLNG = leaflet.latLng(
 // Tunable gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
-const NEIGHBORHOOD_SIZE = 8;
-const CACHE_SPAWN_PROBABILITY = 0.1;
+const INTERACTION_RADIUS = 3;
+const TARGET_VALUE = 256;
 
 // Create the map (element with id "map" is defined in index.html)
 const map = leaflet.map(mapDiv, {
@@ -56,60 +46,110 @@ leaflet
   })
   .addTo(map);
 
-// Add a marker to represent the player
+// --- player state ---
+const player = {
+  latlng: CLASSROOM_LATLNG,
+  holding: null as number | null, // token value in hand
+};
+
 const playerMarker = leaflet.marker(CLASSROOM_LATLNG);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
-// Display the player's points
-let playerPoints = 0;
-statusPanelDiv.innerHTML = "No points yet...";
+const radiusMeters = INTERACTION_RADIUS * TILE_DEGREES * 111320; // approx conversion
+const interactionCircle = leaflet.circle(CLASSROOM_LATLNG, {
+  radius: radiusMeters,
+  color: "#f00",
+  weight: 1,
+  fillOpacity: 0.1,
+});
+interactionCircle.addTo(map);
 
-// Add caches to the map by cell numbers
-function spawnCache(i: number, j: number) {
-  // Convert cell numbers into lat/lng bounds
-  const origin = CLASSROOM_LATLNG;
-  const bounds = leaflet.latLngBounds([
-    [origin.lat + i * TILE_DEGREES, origin.lng + j * TILE_DEGREES],
-    [origin.lat + (i + 1) * TILE_DEGREES, origin.lng + (j + 1) * TILE_DEGREES],
-  ]);
-
-  // Add a rectangle to the map to represent the cache
-  const rect = leaflet.rectangle(bounds);
-  rect.addTo(map);
-
-  // Handle interactions with the cache
-  rect.bindPopup(() => {
-    // Each cache has a random point value, mutable by the player
-    let pointValue = Math.floor(luck([i, j, "initialValue"].toString()) * 100);
-
-    // The popup offers a description and button
-    const popupDiv = document.createElement("div");
-    popupDiv.innerHTML = `
-                <div>There is a cache here at "${i},${j}". It has value <span id="value">${pointValue}</span>.</div>
-                <button id="poke">poke</button>`;
-
-    // Clicking the button decrements the cache's value and increments the player's points
-    popupDiv
-      .querySelector<HTMLButtonElement>("#poke")!
-      .addEventListener("click", () => {
-        pointValue--;
-        popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-          pointValue.toString();
-        playerPoints++;
-        statusPanelDiv.innerHTML = `${playerPoints} points accumulated`;
-      });
-
-    return popupDiv;
-  });
+// --- cell logic ---
+function cellId(i: number, j: number) {
+  return `${i},${j}`;
 }
 
-// Look around the player's neighborhood for caches to spawn
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    // If location i,j is lucky enough, spawn a cache!
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(i, j);
+function tokenAtCell(i: number, j: number): number | null {
+  const r = luck(`${i},${j},spawn`);
+  if (r > 0.15) return null; // 15% chance to spawn
+  const levels = [1, 2, 4, 8];
+  const pick = Math.floor(luck(`${i},${j},value`) * levels.length);
+  return levels[pick];
+}
+
+// --- state overrides (persistent changes) ---
+const overrides: Record<string, number | null> = JSON.parse(
+  localStorage.getItem("overrides") ?? "{}",
+);
+
+function readCell(i: number, j: number): number | null {
+  const id = cellId(i, j);
+  if (id in overrides) return overrides[id];
+  return tokenAtCell(i, j);
+}
+function writeCell(i: number, j: number, val: number | null) {
+  overrides[cellId(i, j)] = val;
+  localStorage.setItem("overrides", JSON.stringify(overrides));
+}
+
+// --- grid rendering ---
+const cells: leaflet.Rectangle[] = [];
+function renderGrid() {
+  cells.forEach((c) => c.remove());
+  cells.length = 0;
+  const range = 8;
+  for (let i = -range; i < range; i++) {
+    for (let j = -range; j < range; j++) {
+      const bounds = leaflet.latLngBounds([
+        [
+          CLASSROOM_LATLNG.lat + i * TILE_DEGREES,
+          CLASSROOM_LATLNG.lng + j * TILE_DEGREES,
+        ],
+        [
+          CLASSROOM_LATLNG.lat + (i + 1) * TILE_DEGREES,
+          CLASSROOM_LATLNG.lng + (j + 1) * TILE_DEGREES,
+        ],
+      ]);
+      const val = readCell(i, j);
+      const color = val ? "#88f" : "#ccc";
+      const rect = leaflet.rectangle(bounds, { color, weight: 1 });
+      rect.addTo(map);
+      rect.bindTooltip(val ? `${val}` : "");
+      rect.on("click", () => onCellClick(i, j, val));
+      cells.push(rect);
     }
   }
 }
+
+// --- interactions ---
+function distance(i: number, j: number) {
+  return Math.max(Math.abs(i), Math.abs(j));
+}
+
+function onCellClick(i: number, j: number, val: number | null) {
+  if (distance(i, j) > INTERACTION_RADIUS) return alert("Too far away!");
+  if (player.holding === null) {
+    // Try to pick up
+    if (val) {
+      player.holding = val;
+      writeCell(i, j, null);
+      alert(`Picked up ${val}`);
+    }
+  } else {
+    // Try to craft
+    if (val === player.holding) {
+      const newVal = val * 2;
+      writeCell(i, j, newVal);
+      player.holding = null;
+      alert(`Crafted ${newVal}`);
+      if (newVal >= TARGET_VALUE) alert("You win!");
+    } else {
+      alert("Cannot craft here!");
+    }
+  }
+  renderGrid();
+}
+
+// --- init ---
+renderGrid();
