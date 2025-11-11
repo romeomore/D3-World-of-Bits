@@ -122,7 +122,7 @@ function renderGrid() {
   }
 }
 
-// --- interactions ---
+// --- interactions inventory---
 function distance(i: number, j: number) {
   return Math.max(Math.abs(i), Math.abs(j));
 }
