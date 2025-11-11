@@ -65,7 +65,7 @@ const interactionCircle = leaflet.circle(CLASSROOM_LATLNG, {
 });
 interactionCircle.addTo(map);
 
-// --- cell logic ---
+// --- cell logic grids ---
 function cellId(i: number, j: number) {
   return `${i},${j}`;
 }
