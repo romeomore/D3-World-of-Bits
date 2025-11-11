@@ -24,7 +24,7 @@ const CLASSROOM_LATLNG = leaflet.latLng(
 // Tunable gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
-const INTERACTION_RADIUS = 3;
+const INTERACTION_RADIUS = 9;
 const TARGET_VALUE = 256;
 
 // Create the map (element with id "map" is defined in index.html)
@@ -46,7 +46,7 @@ leaflet
   })
   .addTo(map);
 
-// --- player state ---
+// --- Added player state ---
 const player = {
   latlng: CLASSROOM_LATLNG,
   holding: null as number | null, // token value in hand
