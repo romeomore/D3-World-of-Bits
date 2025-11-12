@@ -16,4 +16,5 @@ A location based game that combines the elements of 4096 and Threes with Pokemon
 - [x] Add Player movement
 - [x] Add Map Movement
 - [x] Add seeing cells whereever the player goes.
-- [] Increased max number threshold
+- [x] Increased max number threshold
+- [x] Fix inventory bug
