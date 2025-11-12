@@ -6,6 +6,13 @@ A location based game that combines the elements of 4096 and Threes with Pokemon
 
 ## D3.a:Core Mechanics
 
-- [] Add collectible number tokens
-- [] Merge mechanic implemented
-- [] Display Scores
+- [x] Add collectible number tokens
+- [x] Merge mechanic implemented
+- [x] Display Scores
+- [x] Radius Around Player
+
+## D3.b:Globe-spanning Gameplay
+
+- [] Add Player movement
+- [] Add seeing cells whereever the player goes.
+- [] Increased max number threshold
