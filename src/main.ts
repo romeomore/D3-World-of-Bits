@@ -98,7 +98,7 @@ const cells: leaflet.Rectangle[] = [];
 function renderGrid() {
   cells.forEach((c) => c.remove());
   cells.length = 0;
-  const range = 8;
+  const range = 13;
   for (let i = -range; i < range; i++) {
     for (let j = -range; j < range; j++) {
       const bounds = leaflet.latLngBounds([
