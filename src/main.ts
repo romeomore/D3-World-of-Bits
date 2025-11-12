@@ -24,8 +24,8 @@ const CLASSROOM_LATLNG = leaflet.latLng(
 // Tunable gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
-const INTERACTION_RADIUS = 9;
-const TARGET_VALUE = 256;
+const INTERACTION_RADIUS = 3;
+const TARGET_VALUE = 512;
 
 // Create the map (element with id "map" is defined in index.html)
 const map = leaflet.map(mapDiv, {
@@ -86,8 +86,12 @@ document.body.appendChild(overlay);
 
 function updateOverlay() {
   overlay.innerHTML =
-    `Mode: <b>${mode}</b><br>Arrows/WASD to move • Tab to toggle mode`;
+    overlay.innerHTML =
+      `Mode: <b>${mode}</b><br>
+     Arrows/WASD to move • Tab to toggle mode<br>
+     Holding: ${player.holding ?? "None"}`;
 }
+
 updateOverlay();
 
 // --- cell logic grids ---
@@ -185,19 +189,30 @@ function onCellClick(i: number, j: number, val: number | null) {
       player.holding = val;
       writeCell(i, j, null);
       alert(`Picked up ${val}`);
+      updateOverlay();
     }
-  } else {
-    // Try to craft
-    if (val === player.holding) {
-      const newVal = val * 2;
-      writeCell(i, j, newVal);
-      player.holding = null;
-      alert(`Crafted ${newVal}`);
-      if (newVal >= TARGET_VALUE) alert("You win!");
-    } else {
-      alert("Cannot craft here!");
-    }
+    return renderGrid();
   }
+
+  // Try to craft
+  if (val === player.holding) {
+    const newVal = val * 2;
+    writeCell(i, j, newVal);
+    player.holding = null;
+    alert(`Crafted ${newVal}`);
+    updateOverlay();
+    if (newVal >= TARGET_VALUE) alert("You win!");
+    return renderGrid();
+  }
+
+  if (val === null) {
+    writeCell(i, j, player.holding);
+    alert(`Placed ${player.holding} on empty cell`);
+    player.holding = null;
+    updateOverlay();
+    return renderGrid();
+  }
+  alert("Cannot craft here!");
   renderGrid();
 }
 
