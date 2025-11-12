@@ -135,24 +135,32 @@ function cellToLatLng(i: number, j: number): leaflet.LatLng {
   );
 }
 
-function renderGrid(centerLatLng?: leaflet.LatLng) {
+function renderGrid(_centerLatLng?: leaflet.LatLng) {
+  // Remove old cells
   cells.forEach((c) => c.remove());
   cells.length = 0;
-  const range = 13;
-  const center = centerLatLng ?? map.getCenter();
-  const centerCell = latLngToCell(center);
 
-  for (let ii = centerCell.i - range; ii <= centerCell.i + range; ii++) {
-    for (let jj = centerCell.j - range; jj <= centerCell.j + range; jj++) {
+  // Do NOT setView here! Only use map bounds
+  const bounds = map.getBounds();
+  const nw = latLngToCell(bounds.getNorthWest());
+  const se = latLngToCell(bounds.getSouthEast());
+
+  const minI = Math.min(nw.i, se.i);
+  const maxI = Math.max(nw.i, se.i);
+  const minJ = Math.min(nw.j, se.j);
+  const maxJ = Math.max(nw.j, se.j);
+
+  for (let ii = minI; ii <= maxI; ii++) {
+    for (let jj = minJ; jj <= maxJ; jj++) {
       const topLeft = cellToLatLng(ii, jj);
       const bottomRight = cellToLatLng(ii + 1, jj + 1);
-      const bounds = leaflet.latLngBounds([[topLeft.lat, topLeft.lng], [
-        bottomRight.lat,
-        bottomRight.lng,
-      ]]);
+      const rectBounds = leaflet.latLngBounds([
+        [topLeft.lat, topLeft.lng],
+        [bottomRight.lat, bottomRight.lng],
+      ]);
       const val = readCell(ii, jj);
       const color = val ? "#88f" : "#ccc";
-      const rect = leaflet.rectangle(bounds, { color, weight: 1 });
+      const rect = leaflet.rectangle(rectBounds, { color, weight: 1 });
       rect.addTo(map);
       rect.bindTooltip(val ? `${val}` : "");
       rect.on("click", () => onCellClick(ii, jj, val));
