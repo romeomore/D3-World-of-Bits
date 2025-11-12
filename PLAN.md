@@ -13,6 +13,7 @@ A location based game that combines the elements of 4096 and Threes with Pokemon
 
 ## D3.b:Globe-spanning Gameplay
 
-- [] Add Player movement
-- [] Add seeing cells whereever the player goes.
+- [x] Add Player movement
+- [x] Add Map Movement
+- [x] Add seeing cells whereever the player goes.
 - [] Increased max number threshold

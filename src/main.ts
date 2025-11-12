@@ -65,6 +65,31 @@ const interactionCircle = leaflet.circle(CLASSROOM_LATLNG, {
 });
 interactionCircle.addTo(map);
 
+// Movement / view mode state
+type Mode = "player" | "map";
+let mode: Mode = "player";
+
+// Small on-screen overlay that shows current mode and instructions
+const overlay = document.createElement("div");
+overlay.id = "mode-overlay";
+overlay.style.position = "fixed";
+overlay.style.left = "8px";
+overlay.style.bottom = "8px";
+overlay.style.padding = "6px 10px";
+overlay.style.background = "rgba(0,0,0,0.6)";
+overlay.style.color = "#fff";
+overlay.style.fontFamily = "sans-serif";
+overlay.style.fontSize = "13px";
+overlay.style.borderRadius = "6px";
+overlay.style.zIndex = "9999";
+document.body.appendChild(overlay);
+
+function updateOverlay() {
+  overlay.innerHTML =
+    `Mode: <b>${mode}</b><br>Arrows/WASD to move • Tab to toggle mode`;
+}
+updateOverlay();
+
 // --- cell logic grids ---
 function cellId(i: number, j: number) {
   return `${i},${j}`;
@@ -95,40 +120,57 @@ function writeCell(i: number, j: number, val: number | null) {
 
 // --- grid rendering ---
 const cells: leaflet.Rectangle[] = [];
-function renderGrid() {
+
+// Helpers to convert between lat/lng and integer cell coordinates.
+function latLngToCell(latlng: leaflet.LatLng): { i: number; j: number } {
+  const di = (latlng.lat - CLASSROOM_LATLNG.lat) / TILE_DEGREES;
+  const dj = (latlng.lng - CLASSROOM_LATLNG.lng) / TILE_DEGREES;
+  return { i: Math.round(di), j: Math.round(dj) };
+}
+
+function cellToLatLng(i: number, j: number): leaflet.LatLng {
+  return leaflet.latLng(
+    CLASSROOM_LATLNG.lat + i * TILE_DEGREES,
+    CLASSROOM_LATLNG.lng + j * TILE_DEGREES,
+  );
+}
+
+function renderGrid(centerLatLng?: leaflet.LatLng) {
   cells.forEach((c) => c.remove());
   cells.length = 0;
   const range = 13;
-  for (let i = -range; i < range; i++) {
-    for (let j = -range; j < range; j++) {
-      const bounds = leaflet.latLngBounds([
-        [
-          CLASSROOM_LATLNG.lat + i * TILE_DEGREES,
-          CLASSROOM_LATLNG.lng + j * TILE_DEGREES,
-        ],
-        [
-          CLASSROOM_LATLNG.lat + (i + 1) * TILE_DEGREES,
-          CLASSROOM_LATLNG.lng + (j + 1) * TILE_DEGREES,
-        ],
-      ]);
-      const val = readCell(i, j);
+  const center = centerLatLng ?? map.getCenter();
+  const centerCell = latLngToCell(center);
+
+  for (let ii = centerCell.i - range; ii <= centerCell.i + range; ii++) {
+    for (let jj = centerCell.j - range; jj <= centerCell.j + range; jj++) {
+      const topLeft = cellToLatLng(ii, jj);
+      const bottomRight = cellToLatLng(ii + 1, jj + 1);
+      const bounds = leaflet.latLngBounds([[topLeft.lat, topLeft.lng], [
+        bottomRight.lat,
+        bottomRight.lng,
+      ]]);
+      const val = readCell(ii, jj);
       const color = val ? "#88f" : "#ccc";
       const rect = leaflet.rectangle(bounds, { color, weight: 1 });
       rect.addTo(map);
       rect.bindTooltip(val ? `${val}` : "");
-      rect.on("click", () => onCellClick(i, j, val));
+      rect.on("click", () => onCellClick(ii, jj, val));
       cells.push(rect);
     }
   }
 }
 
 // --- interactions inventory---
-function distance(i: number, j: number) {
-  return Math.max(Math.abs(i), Math.abs(j));
+function distanceFromPlayer(i: number, j: number) {
+  const p = latLngToCell(player.latlng);
+  return Math.max(Math.abs(i - p.i), Math.abs(j - p.j));
 }
 
 function onCellClick(i: number, j: number, val: number | null) {
-  if (distance(i, j) > INTERACTION_RADIUS) return alert("Too far away!");
+  if (distanceFromPlayer(i, j) > INTERACTION_RADIUS) {
+    return alert("Too far away!");
+  }
   if (player.holding === null) {
     // Try to pick up
     if (val) {
@@ -152,4 +194,60 @@ function onCellClick(i: number, j: number, val: number | null) {
 }
 
 // --- init ---
-renderGrid();
+// Re-render grid when the map moves (so panning shows new cells)
+map.on("moveend", () => {
+  if (mode === "map") {
+    renderGrid(map.getCenter());
+  }
+});
+
+// Keyboard controls for player movement vs map panning
+function toggleMode() {
+  mode = mode === "player" ? "map" : "player";
+  updateOverlay();
+  // When switching to player mode, center on player. When switching to map mode, keep map center.
+  if (mode === "player") map.setView(player.latlng);
+  renderGrid(mode === "player" ? player.latlng : map.getCenter());
+}
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Tab") {
+    ev.preventDefault();
+    toggleMode();
+    return;
+  }
+
+  // Movement step in degrees
+  const step = TILE_DEGREES;
+  let dLat = 0;
+  let dLng = 0;
+
+  if (ev.key === "ArrowUp" || ev.key.toLowerCase() === "w") dLat = step;
+  if (ev.key === "ArrowDown" || ev.key.toLowerCase() === "s") dLat = -step;
+  if (ev.key === "ArrowLeft" || ev.key.toLowerCase() === "a") dLng = -step;
+  if (ev.key === "ArrowRight" || ev.key.toLowerCase() === "d") dLng = step;
+
+  if (dLat === 0 && dLng === 0) return; // not a movement key
+
+  if (mode === "player") {
+    // Move the player and recenter map on player
+    player.latlng = leaflet.latLng(
+      player.latlng.lat + dLat,
+      player.latlng.lng + dLng,
+    );
+    playerMarker.setLatLng(player.latlng);
+    interactionCircle.setLatLng(player.latlng);
+    map.setView(player.latlng);
+    renderGrid(player.latlng);
+  } else {
+    // Pan the map without moving player
+    const center = map.getCenter();
+    const newCenter = leaflet.latLng(center.lat + dLat, center.lng + dLng);
+    map.setView(newCenter);
+    renderGrid(newCenter);
+  }
+});
+
+// Center initially on player and render
+map.setView(player.latlng);
+renderGrid(player.latlng);
