@@ -11,7 +11,7 @@ A location based game that combines the elements of 4096 and Threes with Pokemon
 - [x] Display Scores
 - [x] Radius Around Player
 
-## D3.b:Globe-spanning Gameplay
+## D3.b:Globe-spanning Gameplay [x]
 
 - [x] Add Player movement
 - [x] Add Map Movement
