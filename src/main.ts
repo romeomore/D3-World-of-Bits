@@ -120,8 +120,8 @@ function tokenAtCell(i: number, j: number): number | null {
   const pick = Math.floor(luck(`${i},${j},value`) * levels.length);
   return levels[pick];
 }
-
-// --- Stores only cells player has changed  ---
+// --- Memento Pattern ---
+// Overrides stores only cells player has changed
 const overrides: CellMemento = loadMemento();
 
 function readCell(i: number, j: number): number | null {
