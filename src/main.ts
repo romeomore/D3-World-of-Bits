@@ -116,7 +116,7 @@ function cellId(i: number, j: number) {
 function tokenAtCell(i: number, j: number): number | null {
   const r = luck(`${i},${j},spawn`);
   if (r > 0.15) return null; // 15% chance to spawn
-  const levels = [1, 2, 4, 8];
+  const levels = [1, 2, 4, 8, 16];
   const pick = Math.floor(luck(`${i},${j},value`) * levels.length);
   return levels[pick];
 }
