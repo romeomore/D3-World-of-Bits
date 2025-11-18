@@ -18,3 +18,8 @@ A location based game that combines the elements of 4096 and Threes with Pokemon
 - [x] Add seeing cells whereever the player goes.
 - [x] Increased max number threshold
 - [x] Fix inventory bug
+
+## D3.c: Object persistence
+
+- [x] Add Flyweight Pattern
+- [] Add Memento Pattern
