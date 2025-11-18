@@ -21,6 +21,19 @@ const CLASSROOM_LATLNG = leaflet.latLng(
   -122.05703507501151,
 );
 
+// Memento type
+type CellMemento = Record<string, number | null>;
+
+// Save all modified cells (the "overrides") to localStorage
+function saveMemento(state: CellMemento) {
+  localStorage.setItem("cellMemento", JSON.stringify(state));
+}
+
+// Load the saved modified cells from localStorage
+function loadMemento(): CellMemento {
+  return JSON.parse(localStorage.getItem("cellMemento") ?? "{}");
+}
+
 // Tunable gameplay parameters
 const GAMEPLAY_ZOOM_LEVEL = 19;
 const TILE_DEGREES = 1e-4;
@@ -98,7 +111,8 @@ updateOverlay();
 function cellId(i: number, j: number) {
   return `${i},${j}`;
 }
-
+//-- FLYWEIGHT PATTERN --
+//Only modified cells are stored and the rest are generated on demand using randomness.
 function tokenAtCell(i: number, j: number): number | null {
   const r = luck(`${i},${j},spawn`);
   if (r > 0.15) return null; // 15% chance to spawn
@@ -107,10 +121,8 @@ function tokenAtCell(i: number, j: number): number | null {
   return levels[pick];
 }
 
-// --- state overrides (persistent changes) ---
-const overrides: Record<string, number | null> = JSON.parse(
-  localStorage.getItem("overrides") ?? "{}",
-);
+// --- Stores only cells player has changed  ---
+const overrides: CellMemento = loadMemento();
 
 function readCell(i: number, j: number): number | null {
   const id = cellId(i, j);
@@ -119,7 +131,7 @@ function readCell(i: number, j: number): number | null {
 }
 function writeCell(i: number, j: number, val: number | null) {
   overrides[cellId(i, j)] = val;
-  localStorage.setItem("overrides", JSON.stringify(overrides));
+  saveMemento(overrides);
 }
 
 // --- grid rendering ---
