@@ -22,4 +22,6 @@ A location based game that combines the elements of 4096 and Threes with Pokemon
 ## D3.c: Object persistence
 
 - [x] Add Flyweight Pattern
-- [] Add Memento Pattern
+- [x] Add Memento Pattern
+
+## D3.d: Gameplay Across Real World Space and Time
