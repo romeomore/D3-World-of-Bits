@@ -310,8 +310,23 @@ btnToggle.onclick = () => {
   localStorage.setItem("movementMode", movementMode);
   controller.stop();
   controller = createController(movementMode, () => player.latlng);
+  controller.onPosition((latlng: leaflet.LatLng) => {
+    player.latlng = latlng;
+    playerMarker.setLatLng(player.latlng);
+    interactionCircle.setLatLng(player.latlng);
+    map.setView(player.latlng);
+    renderGrid(player.latlng);
+    savePlayerState({
+      lat: player.latlng.lat,
+      lng: player.latlng.lng,
+      holding: player.holding,
+    });
+    updateOverlay();
+  });
+  controller.start();
   updateOverlay();
 };
+
 const btnNewGame = document.createElement("button");
 btnNewGame.textContent = "New Game";
 btnNewGame.onclick = () => {
