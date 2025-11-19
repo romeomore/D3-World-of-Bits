@@ -91,9 +91,6 @@ const interactionCircle = leaflet.circle(player.latlng, {
 });
 interactionCircle.addTo(map);
 
-// Movement / view mode state
-type Mode = "player" | "map";
-let mode: Mode = "player";
 // Movement mode (buttons | geolocation) - declared early so overlay can read it
 let movementMode: MovementMode = "buttons";
 
@@ -113,7 +110,7 @@ overlay.style.zIndex = "9999";
 document.body.appendChild(overlay);
 
 function updateOverlay() {
-  overlay.innerHTML = `Mode: <b>${mode}</b><br>
+  overlay.innerHTML = `
      Movement: <b>${movementMode}</b><br>
      Arrows/WASD<br>
      Holding: ${player.holding ?? "None"}`;
@@ -258,33 +255,6 @@ function onCellClick(i: number, j: number, val: number | null) {
 }
 
 // --- init ---
-// Re-render grid when the map moves (so panning shows new cells)
-map.on("moveend", () => {
-  if (mode === "map") {
-    renderGrid(map.getCenter());
-  }
-});
-
-// Keyboard controls for player movement vs map panning
-function toggleMode() {
-  mode = mode === "player" ? "map" : "player";
-  updateOverlay();
-  // When switching to player mode, center on player. When switching to map mode, keep map center.
-  if (mode === "player") map.setView(player.latlng);
-  renderGrid(mode === "player" ? player.latlng : map.getCenter());
-  startControllerIfNeeded();
-}
-
-document.addEventListener("keydown", (ev) => {
-  if (ev.key === "Tab") {
-    ev.preventDefault();
-    toggleMode();
-    return;
-  }
-  // Other keys: movement (arrow/WASD) are handled by the MovementController
-});
-
-// Center initially on player and render
 // Center initially on player and render
 map.setView(player.latlng);
 renderGrid(player.latlng);
@@ -292,31 +262,26 @@ renderGrid(player.latlng);
 // Movement controller lifecycle and hookup
 let controller = createController(movementMode, () => player.latlng);
 
-function startControllerIfNeeded() {
-  if (mode !== "player") {
-    controller.stop();
-    return;
-  }
-  controller.onPosition((latlng: leaflet.LatLng) => {
-    player.latlng = latlng;
-    playerMarker.setLatLng(player.latlng);
-    interactionCircle.setLatLng(player.latlng);
-    map.setView(player.latlng);
-    renderGrid(player.latlng);
-    savePlayerState({
-      lat: player.latlng.lat,
-      lng: player.latlng.lng,
-      holding: player.holding,
-    });
-    updateOverlay();
+controller.onPosition((latlng: leaflet.LatLng) => {
+  player.latlng = latlng;
+  playerMarker.setLatLng(player.latlng);
+  interactionCircle.setLatLng(player.latlng);
+  map.setView(player.latlng);
+  renderGrid(player.latlng);
+  savePlayerState({
+    lat: player.latlng.lat,
+    lng: player.latlng.lng,
+    holding: player.holding,
   });
-  controller.start();
-}
+  updateOverlay();
+});
+controller.start();
 
 // Initialize movement mode from query string or saved preference
 const params = new URLSearchParams(location.search);
 const qMode = params.get("movement");
 const savedMovement = localStorage.getItem("movementMode");
+
 if (qMode === "geolocation" || qMode === "buttons") {
   movementMode = qMode as MovementMode;
 } else if (savedMovement === "geolocation" || savedMovement === "buttons") {
@@ -326,7 +291,7 @@ if (qMode === "geolocation" || qMode === "buttons") {
 // recreate controller with correct mode
 controller.stop();
 controller = createController(movementMode, () => player.latlng);
-startControllerIfNeeded();
+controller.start();
 
 // Expose some runtime controls via small UI appended to body
 const controls = document.createElement("div");
@@ -345,7 +310,6 @@ btnToggle.onclick = () => {
   localStorage.setItem("movementMode", movementMode);
   controller.stop();
   controller = createController(movementMode, () => player.latlng);
-  startControllerIfNeeded();
   updateOverlay();
 };
 const btnNewGame = document.createElement("button");
