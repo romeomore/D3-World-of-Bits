@@ -10,6 +10,12 @@ import "./_leafletWorkaround.ts"; // fixes for missing Leaflet images
 
 // Import our luck function
 import luck from "./_luck.ts";
+import { createController, MovementMode } from "./movement.ts";
+import {
+  clearPlayerState,
+  loadPlayerState,
+  savePlayerState,
+} from "./storage.ts";
 
 const mapDiv = document.createElement("div");
 mapDiv.id = "map";
@@ -65,12 +71,19 @@ const player = {
   holding: null as number | null, // token value in hand
 };
 
-const playerMarker = leaflet.marker(CLASSROOM_LATLNG);
+// Restore saved player state (if any)
+const savedPlayer = loadPlayerState();
+if (savedPlayer) {
+  player.latlng = leaflet.latLng(savedPlayer.lat, savedPlayer.lng);
+  player.holding = savedPlayer.holding;
+}
+
+const playerMarker = leaflet.marker(player.latlng);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
 const radiusMeters = INTERACTION_RADIUS * TILE_DEGREES * 111320; // approx conversion
-const interactionCircle = leaflet.circle(CLASSROOM_LATLNG, {
+const interactionCircle = leaflet.circle(player.latlng, {
   radius: radiusMeters,
   color: "#f00",
   weight: 1,
@@ -81,6 +94,8 @@ interactionCircle.addTo(map);
 // Movement / view mode state
 type Mode = "player" | "map";
 let mode: Mode = "player";
+// Movement mode (buttons | geolocation) - declared early so overlay can read it
+let movementMode: MovementMode = "buttons";
 
 // Small on-screen overlay that shows current mode and instructions
 const overlay = document.createElement("div");
@@ -98,10 +113,9 @@ overlay.style.zIndex = "9999";
 document.body.appendChild(overlay);
 
 function updateOverlay() {
-  overlay.innerHTML =
-    overlay.innerHTML =
-      `Mode: <b>${mode}</b><br>
-     Arrows/WASD to move • Tab to toggle mode<br>
+  overlay.innerHTML = `Mode: <b>${mode}</b><br>
+     Movement: <b>${movementMode}</b><br>
+     Arrows/WASD<br>
      Holding: ${player.holding ?? "None"}`;
 }
 
@@ -202,6 +216,11 @@ function onCellClick(i: number, j: number, val: number | null) {
       writeCell(i, j, null);
       alert(`Picked up ${val}`);
       updateOverlay();
+      savePlayerState({
+        lat: player.latlng.lat,
+        lng: player.latlng.lng,
+        holding: player.holding,
+      });
     }
     return renderGrid();
   }
@@ -213,6 +232,11 @@ function onCellClick(i: number, j: number, val: number | null) {
     player.holding = null;
     alert(`Crafted ${newVal}`);
     updateOverlay();
+    savePlayerState({
+      lat: player.latlng.lat,
+      lng: player.latlng.lng,
+      holding: player.holding,
+    });
     if (newVal >= TARGET_VALUE) alert("You win!");
     return renderGrid();
   }
@@ -222,6 +246,11 @@ function onCellClick(i: number, j: number, val: number | null) {
     alert(`Placed ${player.holding} on empty cell`);
     player.holding = null;
     updateOverlay();
+    savePlayerState({
+      lat: player.latlng.lat,
+      lng: player.latlng.lng,
+      holding: player.holding,
+    });
     return renderGrid();
   }
   alert("Cannot craft here!");
@@ -243,6 +272,7 @@ function toggleMode() {
   // When switching to player mode, center on player. When switching to map mode, keep map center.
   if (mode === "player") map.setView(player.latlng);
   renderGrid(mode === "player" ? player.latlng : map.getCenter());
+  startControllerIfNeeded();
 }
 
 document.addEventListener("keydown", (ev) => {
@@ -251,38 +281,81 @@ document.addEventListener("keydown", (ev) => {
     toggleMode();
     return;
   }
+  // Other keys: movement (arrow/WASD) are handled by the MovementController
+});
 
-  // Movement step in degrees
-  const step = TILE_DEGREES;
-  let dLat = 0;
-  let dLng = 0;
+// Center initially on player and render
+// Center initially on player and render
+map.setView(player.latlng);
+renderGrid(player.latlng);
 
-  if (ev.key === "ArrowUp" || ev.key.toLowerCase() === "w") dLat = step;
-  if (ev.key === "ArrowDown" || ev.key.toLowerCase() === "s") dLat = -step;
-  if (ev.key === "ArrowLeft" || ev.key.toLowerCase() === "a") dLng = -step;
-  if (ev.key === "ArrowRight" || ev.key.toLowerCase() === "d") dLng = step;
+// Movement controller lifecycle and hookup
+let controller = createController(movementMode, () => player.latlng);
 
-  if (dLat === 0 && dLng === 0) return; // not a movement key
-
-  if (mode === "player") {
-    // Move the player and recenter map on player
-    player.latlng = leaflet.latLng(
-      player.latlng.lat + dLat,
-      player.latlng.lng + dLng,
-    );
+function startControllerIfNeeded() {
+  if (mode !== "player") {
+    controller.stop();
+    return;
+  }
+  controller.onPosition((latlng: leaflet.LatLng) => {
+    player.latlng = latlng;
     playerMarker.setLatLng(player.latlng);
     interactionCircle.setLatLng(player.latlng);
     map.setView(player.latlng);
     renderGrid(player.latlng);
-  } else {
-    // Pan the map without moving player
-    const center = map.getCenter();
-    const newCenter = leaflet.latLng(center.lat + dLat, center.lng + dLng);
-    map.setView(newCenter);
-    renderGrid(newCenter);
-  }
-});
+    savePlayerState({
+      lat: player.latlng.lat,
+      lng: player.latlng.lng,
+      holding: player.holding,
+    });
+    updateOverlay();
+  });
+  controller.start();
+}
 
-// Center initially on player and render
-map.setView(player.latlng);
-renderGrid(player.latlng);
+// Initialize movement mode from query string or saved preference
+const params = new URLSearchParams(location.search);
+const qMode = params.get("movement");
+const savedMovement = localStorage.getItem("movementMode");
+if (qMode === "geolocation" || qMode === "buttons") {
+  movementMode = qMode as MovementMode;
+} else if (savedMovement === "geolocation" || savedMovement === "buttons") {
+  movementMode = savedMovement as MovementMode;
+}
+
+// recreate controller with correct mode
+controller.stop();
+controller = createController(movementMode, () => player.latlng);
+startControllerIfNeeded();
+
+// Expose some runtime controls via small UI appended to body
+const controls = document.createElement("div");
+controls.style.position = "fixed";
+controls.style.right = "8px";
+controls.style.bottom = "8px";
+controls.style.zIndex = "9999";
+controls.style.display = "flex";
+controls.style.flexDirection = "column";
+controls.style.gap = "6px";
+const btnToggle = document.createElement("button");
+btnToggle.textContent = "Toggle Movement";
+btnToggle.onclick = () => {
+  // switch movement mode
+  movementMode = movementMode === "buttons" ? "geolocation" : "buttons";
+  localStorage.setItem("movementMode", movementMode);
+  controller.stop();
+  controller = createController(movementMode, () => player.latlng);
+  startControllerIfNeeded();
+  updateOverlay();
+};
+const btnNewGame = document.createElement("button");
+btnNewGame.textContent = "New Game";
+btnNewGame.onclick = () => {
+  // clear saved cells and player state
+  localStorage.removeItem("cellMemento");
+  clearPlayerState();
+  location.reload();
+};
+controls.appendChild(btnToggle);
+controls.appendChild(btnNewGame);
+document.body.appendChild(controls);
