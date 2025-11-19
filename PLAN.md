@@ -25,3 +25,8 @@ A location based game that combines the elements of 4096 and Threes with Pokemon
 - [x] Add Memento Pattern
 
 ## D3.d: Gameplay Across Real World Space and Time
+
+- [] Save Player State
+- [] Add GeoLocation-base Movement
+- [] Add toggle for different Movements
+- []
