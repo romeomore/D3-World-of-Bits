@@ -291,6 +291,22 @@ if (qMode === "geolocation" || qMode === "buttons") {
 // recreate controller with correct mode
 controller.stop();
 controller = createController(movementMode, () => player.latlng);
+
+// Reattach the position handler and start the new controller so
+// the chosen movement mode is active immediately.
+controller.onPosition((latlng: leaflet.LatLng) => {
+  player.latlng = latlng;
+  playerMarker.setLatLng(player.latlng);
+  interactionCircle.setLatLng(player.latlng);
+  map.setView(player.latlng);
+  renderGrid(player.latlng);
+  savePlayerState({
+    lat: player.latlng.lat,
+    lng: player.latlng.lng,
+    holding: player.holding,
+  });
+  updateOverlay();
+});
 controller.start();
 
 // Expose some runtime controls via small UI appended to body
